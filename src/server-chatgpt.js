@@ -11,6 +11,19 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Create the MCP server
+const server = new Server(
+  {
+    name: 'tmdb-chatgpt-mcp',
+    version: '1.0.0',
+  },
+  {
+    capabilities: {
+      tools: {},
+    },
+  }
+);
+
 // Debug environment variables
 console.log('🔍 Environment variables check:');
 console.log('PORT:', process.env.PORT);
@@ -25,19 +38,6 @@ if (!TMDB_API_KEY) {
   console.log('Available env vars:', Object.keys(process.env).filter(key => key.includes('TMDB')));
   process.exit(1);
 }
-
-// Create the MCP server
-const server = new Server(
-  {
-    name: 'tmdb-chatgpt-mcp',
-    version: '1.0.0',
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
-  }
-);
 
 // Define tools with ChatGPT-required names
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -133,7 +133,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Basic status endpoint
 app.get('/', (req, res) => {
-  console.log('✅ Root endpoint hit');
   res.json({
     name: 'TMDB ChatGPT MCP Server',
     version: '1.0.0',
@@ -147,48 +146,30 @@ app.get('/', (req, res) => {
 
 // Health check
 app.get('/health', (req, res) => {
-  console.log('❤️ Health check hit');
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
-
-// Simple test endpoint
-app.get('/test', (req, res) => {
-  console.log('🧪 Test endpoint hit');
-  res.send('Server is working!');
 });
 
 // Start server
 const PORT = process.env.PORT || 3000;
 
 async function main() {
-  try {
-    // Create the transport with proper path
-    const transport = new StreamableHTTPServerTransport(app, server, {
-      path: '/mcp'
-    });
-    
-    console.log('🚀 Transport created successfully');
-    
-    // Start the HTTP server
-    app.listen(PORT, () => {
-      console.log(`🎬 TMDB ChatGPT MCP Server running on port ${PORT}`);
-      console.log(`📡 MCP endpoint: http://localhost:${PORT}/mcp`);
-      console.log(`🌐 Status: http://localhost:${PORT}/`);
-      console.log(`❤️ Health: http://localhost:${PORT}/health`);
-      console.log(`🧪 Test: http://localhost:${PORT}/test`);
-    });
+  // Create the transport
+  const transport = new StreamableHTTPServerTransport(app, server);
+  
+  // Start the HTTP server
+  app.listen(PORT, () => {
+    console.log(`🎬 TMDB ChatGPT MCP Server running on port ${PORT}`);
+    console.log(`📡 MCP endpoint: http://localhost:${PORT}/mcp`);
+    console.log(`🌐 Status: http://localhost:${PORT}/`);
+    console.log(`❤️ Health: http://localhost:${PORT}/health`);
+  });
 
-    // Handle process termination
-    process.on('SIGINT', async () => {
-      console.log('\n🛑 Shutting down server...');
-      await server.close();
-      process.exit(0);
-    });
-    
-  } catch (error) {
-    console.error('❌ Error starting server:', error);
-    process.exit(1);
-  }
+  // Handle process termination
+  process.on('SIGINT', async () => {
+    console.log('\n🛑 Shutting down server...');
+    await server.close();
+    process.exit(0);
+  });
 }
 
 main().catch(console.error);
