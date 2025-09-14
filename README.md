@@ -147,57 +147,6 @@ npm run start:chatgpt
 
 The server will start with SSE endpoints at `/sse` and `/messages` for ChatGPT integration.
 
-### Usage with Claude Desktop
-
-To integrate this server with Claude Desktop, add the following to your app's server configuration file (located at `~/Library/Application Support/Claude/config.json`):
-
-```json
-{
-  "mcpServers": {
-    "tmdb": {
-      "command": "/full/path/to/dist/index.js",
-      "env": {
-        "TMDB_API_KEY": "your_api_key_here"
-      }
-    }
-  }
-}
-```
-
-Replace `/full/path/to` with the actual path to your project directory.
-
-### Installing via Smithery
-
-To install TMDB Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@Laksh-star/mcp-server-tmdb):
-
-```bash
-npx -y @smithery/cli install @Laksh-star/mcp-server-tmdb --client claude
-```
-
-## Example usage
-
-Once the server is running with Claude Desktop, you can use commands like:
-
-1. Search for movies:
-   ```
-   "Search for movies about artificial intelligence"
-   ```
-
-2. Get trending movies:
-   ```
-   "What are the trending movies today?"
-   "Show me this week's trending movies"
-   ```
-
-3. Get movie recommendations:
-   ```
-   "Get movie recommendations based on movie ID 550"
-   ```
-
-4. Get movie details:
-   ```
-   "Tell me about the movie with ID 550"
-   ```
 
 ### ChatGPT Usage Examples
 
