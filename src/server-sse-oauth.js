@@ -228,9 +228,27 @@ Cast: ${data.credits?.cast?.slice(0, 5).map(actor => actor.name).join(', ') || '
   }
 });
 
-// SSE endpoint with authentication
-app.get('/sse', requireAuth, async (req, res) => {
-  console.log('SSE connection request');
+// SSE endpoint with optional authentication for testing
+app.get('/sse', async (req, res) => {
+  console.log('SSE connection request from:', req.headers['user-agent']);
+  console.log('Authorization header:', req.headers.authorization ? 'Present' : 'Missing');
+  
+  // Check for auth but don't require it for initial connection test
+  if (req.headers.authorization) {
+    const auth = req.headers.authorization;
+    if (auth.startsWith('Bearer ')) {
+      const token = auth.slice(7);
+      const tokenData = tokens.get(token);
+      
+      if (!tokenData || tokenData.type !== 'access_token') {
+        console.log('Invalid access token:', token);
+        return res.status(401).json({ error: 'invalid_token' });
+      }
+      console.log('Valid token for client:', tokenData.client_id);
+    }
+  } else {
+    console.log('No authorization header - allowing connection test');
+  }
   
   // Create SSE transport for this connection
   const transport = new SSEServerTransport('/sse', server);
