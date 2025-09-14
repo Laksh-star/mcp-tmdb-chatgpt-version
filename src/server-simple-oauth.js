@@ -21,7 +21,7 @@ app.use(express.urlencoded({ extended: true }));
 // Simple in-memory storage
 const tokens = new Map();
 
-// OAuth Authorization Server Metadata - minimal for ChatGPT
+// Minimal OAuth metadata for ChatGPT
 app.get('/.well-known/oauth-authorization-server', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   res.json({
@@ -35,44 +35,47 @@ app.get('/.well-known/oauth-authorization-server', (req, res) => {
   });
 });
 
-// Extremely simple OAuth authorize endpoint
+// Simple OAuth authorize endpoint  
 app.get('/oauth/authorize', (req, res) => {
-  const { client_id, redirect_uri, scope, state } = req.query;
+  const { client_id, redirect_uri, scope, state, response_type } = req.query;
   
-  console.log('ChatGPT OAuth authorize:', { client_id, redirect_uri, scope, state });
+  console.log('ChatGPT OAuth authorize:', { client_id, redirect_uri, scope, state, response_type });
   
-  // Generate a simple code
+  // Generate authorization code
   const code = randomUUID();
   
-  // Store it temporarily
+  // Store it simply
   tokens.set(code, {
-    client_id,
+    client_id: client_id || 'default',
     scope: scope || 'read',
     created_at: Date.now()
   });
   
-  // Redirect back to ChatGPT immediately (auto-approve)
+  // Auto-approve and redirect back to ChatGPT
   const callback = new URL(redirect_uri);
   callback.searchParams.set('code', code);
   if (state) callback.searchParams.set('state', state);
   
+  console.log('Generated code:', code);
   console.log('Redirecting to:', callback.toString());
   res.redirect(callback.toString());
 });
 
 // Simple token endpoint
 app.post('/oauth/token', (req, res) => {
-  const { grant_type, code } = req.body;
+  const { grant_type, code, client_id } = req.body;
   
-  console.log('ChatGPT token request:', { grant_type, code });
+  console.log('ChatGPT token request:', { grant_type, code, client_id });
   
   if (grant_type !== 'authorization_code') {
+    console.log('Unsupported grant type:', grant_type);
     return res.status(400).json({ error: 'unsupported_grant_type' });
   }
   
   const tokenData = tokens.get(code);
   if (!tokenData) {
-    console.log('Invalid code:', code);
+    console.log('Invalid or expired code:', code);
+    console.log('Available codes:', Array.from(tokens.keys()));
     return res.status(400).json({ error: 'invalid_grant' });
   }
   
@@ -137,13 +140,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'search',
-        description: 'Search for movies by title or keywords using TMDB',
+        description: 'Search for movies by title or keywords using TMDB. Use this when the user asks to find movies, search for films, or look up movies by name. Returns movie titles, IDs, ratings, and overviews.',
         inputSchema: {
           type: 'object',
           properties: {
             query: {
               type: 'string',
-              description: 'Search query for movies',
+              description: 'Movie title, keywords, or search terms to find movies',
             },
           },
           required: ['query'],
@@ -151,45 +154,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'fetch',
-        description: 'Fetch detailed information about a specific movie by ID',
+        description: 'Get detailed information about a specific movie by its TMDB ID. Use this when you have a movie ID and need complete details like plot, cast, director, genres, runtime, etc.',
         inputSchema: {
           type: 'object',
           properties: {
-            movieId: {
+            id: {
               type: 'string',
-              description: 'TMDB movie ID to fetch details for',
+              description: 'The TMDB movie ID number (from search results or user input)',
             },
           },
-          required: ['movieId'],
-        },
-      },
-      {
-        name: 'get_recommendations',
-        description: 'Get movie recommendations based on a movie ID',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            movieId: {
-              type: 'string',
-              description: 'TMDB movie ID',
-            },
-          },
-          required: ['movieId'],
-        },
-      },
-      {
-        name: 'get_trending',
-        description: 'Get trending movies for a specified time window',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            timeWindow: {
-              type: 'string',
-              description: 'Time window: "day" or "week"',
-              enum: ['day', 'week'],
-            },
-          },
-          required: ['timeWindow'],
+          required: ['id'],
         },
       },
     ],
@@ -207,41 +181,59 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case 'search': {
+        console.log('TMDB search for:', args.query);
         const response = await fetch(
           `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${encodeURIComponent(args.query)}`
         );
         const data = await response.json();
-        return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+        
+        // Format results according to ChatGPT MCP spec
+        const results = {
+          results: data.results?.slice(0, 10).map(movie => ({
+            id: movie.id.toString(),
+            title: `${movie.title} (${movie.release_date?.split('-')[0] || 'Unknown'})`,
+            url: `https://www.themoviedb.org/movie/${movie.id}`
+          })) || []
+        };
+        
+        return { content: [{ type: 'text', text: JSON.stringify(results) }] };
       }
       
       case 'fetch': {
+        console.log('TMDB fetch for ID:', args.id);
         const response = await fetch(
-          `https://api.themoviedb.org/3/movie/${args.movieId}?api_key=${apiKey}`
+          `https://api.themoviedb.org/3/movie/${args.id}?api_key=${apiKey}&append_to_response=credits,reviews`
         );
         const data = await response.json();
-        return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
-      }
-      
-      case 'get_recommendations': {
-        const response = await fetch(
-          `https://api.themoviedb.org/3/movie/${args.movieId}/recommendations?api_key=${apiKey}`
-        );
-        const data = await response.json();
-        return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
-      }
-      
-      case 'get_trending': {
-        const response = await fetch(
-          `https://api.themoviedb.org/3/trending/movie/${args.timeWindow}?api_key=${apiKey}`
-        );
-        const data = await response.json();
-        return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+        
+        // Format document according to ChatGPT MCP spec
+        const document = {
+          id: data.id?.toString() || args.id,
+          title: `${data.title} (${data.release_date?.split('-')[0] || 'Unknown'})`,
+          text: `Title: ${data.title}
+Release Date: ${data.release_date}
+Rating: ${data.vote_average}/10
+Overview: ${data.overview}
+Genres: ${data.genres?.map(g => g.name).join(', ') || 'Unknown'}
+Runtime: ${data.runtime} minutes
+Director: ${data.credits?.crew?.find(person => person.job === 'Director')?.name || 'Unknown'}
+Cast: ${data.credits?.cast?.slice(0, 5).map(actor => actor.name).join(', ') || 'Unknown'}`,
+          url: `https://www.themoviedb.org/movie/${data.id}`,
+          metadata: {
+            budget: data.budget,
+            revenue: data.revenue,
+            popularity: data.popularity
+          }
+        };
+        
+        return { content: [{ type: 'text', text: JSON.stringify(document) }] };
       }
       
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error) {
+    console.error('Tool execution error:', error);
     throw new Error(`Tool execution failed: ${error.message}`);
   }
 });
