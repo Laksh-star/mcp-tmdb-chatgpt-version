@@ -2,6 +2,6 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "npm run start:noauth"
+startCommand = "node server-http.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
