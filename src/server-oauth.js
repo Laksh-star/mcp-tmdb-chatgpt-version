@@ -21,70 +21,51 @@ app.use(express.urlencoded({ extended: true }));
 // Simple in-memory storage
 const tokens = new Map();
 
-// OAuth Authorization Server Metadata - ChatGPT compatible
+// Minimal OAuth metadata for ChatGPT
 app.get('/.well-known/oauth-authorization-server', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   res.json({
     issuer: baseUrl,
     authorization_endpoint: `${baseUrl}/oauth/authorize`,
     token_endpoint: `${baseUrl}/oauth/token`,
-    scopes_supported: ['read', 'openid'],
+    scopes_supported: ['read'],
     response_types_supported: ['code'],
-    grant_types_supported: ['authorization_code', 'client_credentials'],
-    token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
-    code_challenge_methods_supported: ['S256', 'plain']
+    grant_types_supported: ['authorization_code'],
+    token_endpoint_auth_methods_supported: ['none']
   });
 });
 
-// OAuth authorize endpoint with PKCE support
+// Simple OAuth authorize endpoint  
 app.get('/oauth/authorize', (req, res) => {
-  const { 
-    client_id, 
-    redirect_uri, 
-    scope, 
-    state, 
-    code_challenge, 
-    code_challenge_method,
-    response_type 
-  } = req.query;
+  const { client_id, redirect_uri, scope, state, response_type } = req.query;
   
-  console.log('ChatGPT OAuth authorize:', { 
-    client_id, 
-    redirect_uri, 
-    scope, 
-    state, 
-    code_challenge: !!code_challenge,
-    code_challenge_method,
-    response_type 
-  });
+  console.log('ChatGPT OAuth authorize:', { client_id, redirect_uri, scope, state, response_type });
   
-  // Generate a simple code
+  // Generate authorization code
   const code = randomUUID();
   
-  // Store it with PKCE info
+  // Store it simply
   tokens.set(code, {
-    client_id,
+    client_id: client_id || 'default',
     scope: scope || 'read',
-    code_challenge,
-    code_challenge_method,
-    redirect_uri,
     created_at: Date.now()
   });
   
-  // Redirect back to ChatGPT immediately (auto-approve)
+  // Auto-approve and redirect back to ChatGPT
   const callback = new URL(redirect_uri);
   callback.searchParams.set('code', code);
   if (state) callback.searchParams.set('state', state);
   
+  console.log('Generated code:', code);
   console.log('Redirecting to:', callback.toString());
   res.redirect(callback.toString());
 });
 
-// Token endpoint with PKCE support
+// Simple token endpoint
 app.post('/oauth/token', (req, res) => {
-  const { grant_type, code, code_verifier, client_id } = req.body;
+  const { grant_type, code, client_id } = req.body;
   
-  console.log('ChatGPT token request:', { grant_type, code, code_verifier: !!code_verifier, client_id });
+  console.log('ChatGPT token request:', { grant_type, code, client_id });
   
   if (grant_type !== 'authorization_code') {
     console.log('Unsupported grant type:', grant_type);
@@ -93,35 +74,16 @@ app.post('/oauth/token', (req, res) => {
   
   const tokenData = tokens.get(code);
   if (!tokenData) {
-    console.log('Invalid code:', code);
+    console.log('Invalid or expired code:', code);
+    console.log('Available codes:', Array.from(tokens.keys()));
     return res.status(400).json({ error: 'invalid_grant' });
-  }
-  
-  // PKCE verification if code_challenge was used
-  if (tokenData.code_challenge && code_verifier) {
-    const crypto = await import('crypto');
-    let challengeFromVerifier;
-    
-    if (tokenData.code_challenge_method === 'S256') {
-      challengeFromVerifier = crypto.createHash('sha256')
-        .update(code_verifier)
-        .digest('base64url');
-    } else {
-      challengeFromVerifier = code_verifier; // plain method
-    }
-    
-    if (challengeFromVerifier !== tokenData.code_challenge) {
-      console.log('PKCE verification failed');
-      return res.status(400).json({ error: 'invalid_grant' });
-    }
-    console.log('PKCE verification passed');
   }
   
   // Generate access token
   const accessToken = randomUUID();
   tokens.set(accessToken, {
     type: 'access_token',
-    client_id: tokenData.client_id || client_id,
+    client_id: tokenData.client_id,
     scope: tokenData.scope,
     created_at: Date.now()
   });
@@ -178,13 +140,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'search',
-        description: 'Search for movies by title or keywords using TMDB',
+        description: 'Search for movies by title or keywords using TMDB. Use this when the user asks to find movies, search for films, or look up movies by name. Returns movie titles, IDs, ratings, and overviews.',
         inputSchema: {
           type: 'object',
           properties: {
             query: {
               type: 'string',
-              description: 'Search query for movies',
+              description: 'Movie title, keywords, or search terms to find movies',
             },
           },
           required: ['query'],
@@ -192,13 +154,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'fetch',
-        description: 'Fetch detailed information about a specific movie by ID',
+        description: 'Get detailed information about a specific movie by its TMDB ID. Use this when you have a movie ID and need complete details like plot, cast, director, genres, runtime, etc.',
         inputSchema: {
           type: 'object',
           properties: {
             movieId: {
               type: 'string',
-              description: 'TMDB movie ID to fetch details for',
+              description: 'The TMDB movie ID number (from search results or user input)',
             },
           },
           required: ['movieId'],
@@ -206,13 +168,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'get_recommendations',
-        description: 'Get movie recommendations based on a movie ID',
+        description: 'Get movie recommendations similar to a specific movie. Use this when the user asks for movies similar to or like a particular film they mention.',
         inputSchema: {
           type: 'object',
           properties: {
             movieId: {
               type: 'string',
-              description: 'TMDB movie ID',
+              description: 'TMDB movie ID to base recommendations on',
             },
           },
           required: ['movieId'],
@@ -220,13 +182,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'get_trending',
-        description: 'Get trending movies for a specified time window',
+        description: 'Get currently trending/popular movies. Use this when the user asks about popular movies, trending films, what\'s hot now, or current movie trends.',
         inputSchema: {
           type: 'object',
           properties: {
             timeWindow: {
               type: 'string',
-              description: 'Time window: "day" or "week"',
+              description: 'Time period for trending movies',
               enum: ['day', 'week'],
             },
           },
