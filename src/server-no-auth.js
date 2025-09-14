@@ -135,13 +135,13 @@ const transport = new SSEServerTransport('/sse', server);
 // SSE endpoint (no authentication required)
 app.get('/sse', async (req, res) => {
   console.log('SSE connection from:', req.headers['user-agent']);
-  await transport.handleSSEConnection(req, res);
+  await transport.handleRequest(req, res);
 });
 
 // Messages endpoint (no authentication required) 
 app.post('/messages', async (req, res) => {
   console.log('Messages request');
-  await transport.handlePostRequest(req, res);
+  await transport.handleRequest(req, res);
 });
 
 // Root status
