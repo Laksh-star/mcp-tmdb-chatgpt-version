@@ -9,7 +9,12 @@ import fetch from 'node-fetch';
 import cors from 'cors';
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'mcp-session-id']
+}));
 app.use(express.json());
 
 // Map to store transports by session ID
@@ -93,12 +98,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   const { name, arguments: args } = request.params;
-  const apiKey = process.env.TMDB_API_KEY;
+  
+  // Get API key from environment or request context
+  let apiKey = process.env.TMDB_API_KEY;
+  if (!apiKey && extra?.headers?.['x-api-key']) {
+    apiKey = extra.headers['x-api-key'];
+  }
   
   if (!apiKey) {
-    throw new Error('TMDB_API_KEY environment variable is required');
+    throw new Error('TMDB_API_KEY required via environment variable or x-api-key header');
   }
 
   try {
