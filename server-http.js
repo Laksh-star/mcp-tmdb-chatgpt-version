@@ -27,46 +27,31 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: 'search_movies',
-        description: 'Search for movies by title or keywords',
+        name: 'search',
+        description: 'Search for movies by title or keywords using TMDB',
         inputSchema: {
           type: 'object',
           properties: {
             query: {
               type: 'string',
-              description: 'Search query',
+              description: 'Search query for movies',
             },
           },
           required: ['query'],
         },
       },
       {
-        name: 'get_recommendations',
-        description: 'Get movie recommendations based on a movie ID',
+        name: 'fetch',
+        description: 'Fetch detailed movie information by TMDB movie ID',
         inputSchema: {
           type: 'object',
           properties: {
-            movieId: {
+            id: {
               type: 'string',
               description: 'TMDB movie ID',
             },
           },
-          required: ['movieId'],
-        },
-      },
-      {
-        name: 'get_trending',
-        description: 'Get trending movies for a specified time window',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            timeWindow: {
-              type: 'string',
-              description: 'Time window: "day" or "week"',
-              enum: ['day', 'week'],
-            },
-          },
-          required: ['timeWindow'],
+          required: ['id'],
         },
       },
     ],
@@ -83,28 +68,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
-      case 'search_movies': {
+      case 'search': {
         const response = await fetch(
           `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${encodeURIComponent(args.query)}`
         );
         const data = await response.json();
-        return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+        
+        const results = {
+          results: data.results?.slice(0, 10).map(movie => ({
+            id: movie.id.toString(),
+            title: `${movie.title} (${movie.release_date?.split('-')[0] || 'Unknown'})`,
+            url: `https://www.themoviedb.org/movie/${movie.id}`
+          })) || []
+        };
+        
+        return { content: [{ type: 'text', text: JSON.stringify(results) }] };
       }
       
-      case 'get_recommendations': {
+      case 'fetch': {
         const response = await fetch(
-          `https://api.themoviedb.org/3/movie/${args.movieId}/recommendations?api_key=${apiKey}`
+          `https://api.themoviedb.org/3/movie/${args.id}?api_key=${apiKey}&append_to_response=credits`
         );
         const data = await response.json();
-        return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
-      }
-      
-      case 'get_trending': {
-        const response = await fetch(
-          `https://api.themoviedb.org/3/trending/movie/${args.timeWindow}?api_key=${apiKey}`
-        );
-        const data = await response.json();
-        return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+        
+        const document = {
+          id: data.id?.toString() || args.id,
+          title: `${data.title} (${data.release_date?.split('-')[0] || 'Unknown'})`,
+          text: `${data.title}\n\nRelease Date: ${data.release_date}\nRating: ${data.vote_average}/10\n\nOverview: ${data.overview}\n\nGenres: ${data.genres?.map(g => g.name).join(', ')}\nRuntime: ${data.runtime} minutes\nDirector: ${data.credits?.crew?.find(p => p.job === 'Director')?.name}\nMain Cast: ${data.credits?.cast?.slice(0, 5).map(a => a.name).join(', ')}`,
+          url: `https://www.themoviedb.org/movie/${data.id}`,
+          metadata: {
+            tmdb_id: data.id,
+            popularity: data.popularity
+          }
+        };
+        
+        return { content: [{ type: 'text', text: JSON.stringify(document) }] };
       }
       
       default:
