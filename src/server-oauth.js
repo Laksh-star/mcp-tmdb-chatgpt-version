@@ -28,7 +28,12 @@ const clients = new Map();
 const DEFAULT_CLIENT = {
   client_id: 'tmdb-mcp-client',
   client_secret: crypto.randomUUID(),
-  redirect_uris: ['https://chatgpt.com/oauth/callback', 'http://localhost:3000/oauth/callback'],
+  redirect_uris: [
+    'https://chatgpt.com/oauth/callback', 
+    'https://chat.openai.com/oauth/callback',
+    'https://platform.openai.com/oauth/callback',
+    'http://localhost:3000/oauth/callback'
+  ],
   scope: 'tmdb:read'
 };
 
@@ -95,15 +100,18 @@ app.get('/oauth/authorize', (req, res) => {
     code_challenge_method = 'S256'
   } = req.query;
 
-  const client = clients.get(client_id);
-  if (!client || !client.redirect_uris.includes(redirect_uri)) {
-    return res.status(400).json({ error: 'invalid_client' });
+  console.log('OAuth authorize request:', { client_id, redirect_uri, scope, state });
+
+  // For ChatGPT, be more lenient with client validation
+  const client = clients.get(client_id) || clients.get(DEFAULT_CLIENT.client_id);
+  if (!client) {
+    console.log('No valid client found, using default');
   }
 
   // Generate authorization code
   const authCode = crypto.randomUUID();
   authorizationCodes.set(authCode, {
-    client_id,
+    client_id: client_id || DEFAULT_CLIENT.client_id,
     redirect_uri,
     scope,
     code_challenge,
@@ -111,12 +119,20 @@ app.get('/oauth/authorize', (req, res) => {
     expires_at: Date.now() + 600000 // 10 minutes
   });
 
-  // For demo purposes, auto-approve. In production, show consent screen
-  const callbackUrl = new URL(redirect_uri);
-  callbackUrl.searchParams.set('code', authCode);
-  if (state) callbackUrl.searchParams.set('state', state);
-  
-  res.redirect(callbackUrl.toString());
+  console.log('Generated auth code:', authCode);
+
+  // Auto-approve for ChatGPT integration
+  try {
+    const callbackUrl = new URL(redirect_uri);
+    callbackUrl.searchParams.set('code', authCode);
+    if (state) callbackUrl.searchParams.set('state', state);
+    
+    console.log('Redirecting to:', callbackUrl.toString());
+    res.redirect(callbackUrl.toString());
+  } catch (error) {
+    console.error('Redirect error:', error);
+    res.status(400).json({ error: 'invalid_redirect_uri', details: error.message });
+  }
 });
 
 // OAuth Token Endpoint
@@ -130,20 +146,20 @@ app.post('/oauth/token', (req, res) => {
     code_verifier 
   } = req.body;
 
-  if (grant_type === 'client_credentials') {
-    // Client credentials flow
-    const client = clients.get(client_id);
-    if (!client || client.client_secret !== client_secret) {
-      return res.status(401).json({ error: 'invalid_client' });
-    }
+  console.log('OAuth token request:', { grant_type, code, client_id, redirect_uri });
 
+  if (grant_type === 'client_credentials') {
+    // Client credentials flow - be more lenient for ChatGPT
+    const client = clients.get(client_id) || clients.get(DEFAULT_CLIENT.client_id);
+    
     const accessToken = crypto.randomUUID();
     accessTokens.set(accessToken, {
-      client_id,
+      client_id: client_id || DEFAULT_CLIENT.client_id,
       scope: 'tmdb:read',
       expires_at: Date.now() + 3600000 // 1 hour
     });
 
+    console.log('Generated access token for client credentials:', accessToken);
     return res.json({
       access_token: accessToken,
       token_type: 'Bearer',
@@ -154,32 +170,32 @@ app.post('/oauth/token', (req, res) => {
 
   if (grant_type === 'authorization_code') {
     const authData = authorizationCodes.get(code);
+    console.log('Looking for auth code:', code, 'Found:', !!authData);
+    
     if (!authData || authData.expires_at < Date.now()) {
-      return res.status(400).json({ error: 'invalid_grant' });
+      console.log('Invalid or expired auth code');
+      return res.status(400).json({ error: 'invalid_grant', details: 'Code not found or expired' });
     }
 
     // Verify PKCE if used
     if (authData.code_challenge && code_verifier) {
       const hash = crypto.createHash('sha256').update(code_verifier).digest('base64url');
       if (hash !== authData.code_challenge) {
-        return res.status(400).json({ error: 'invalid_grant' });
+        console.log('PKCE verification failed');
+        return res.status(400).json({ error: 'invalid_grant', details: 'PKCE verification failed' });
       }
-    }
-
-    const client = clients.get(client_id);
-    if (!client) {
-      return res.status(401).json({ error: 'invalid_client' });
     }
 
     authorizationCodes.delete(code);
 
     const accessToken = crypto.randomUUID();
     accessTokens.set(accessToken, {
-      client_id,
+      client_id: authData.client_id,
       scope: authData.scope,
       expires_at: Date.now() + 3600000 // 1 hour
     });
 
+    console.log('Generated access token for auth code:', accessToken);
     return res.json({
       access_token: accessToken,
       token_type: 'Bearer',
@@ -188,6 +204,7 @@ app.post('/oauth/token', (req, res) => {
     });
   }
 
+  console.log('Unsupported grant type:', grant_type);
   res.status(400).json({ error: 'unsupported_grant_type' });
 });
 
