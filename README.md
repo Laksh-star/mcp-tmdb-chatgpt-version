@@ -119,6 +119,38 @@ The server provides access to TMDB movie information:
    export TMDB_API_KEY=your_api_key_here
    ```
 
+## ChatGPT Developer Mode Integration
+
+This server now supports **ChatGPT Developer Mode** with a dedicated MCP implementation:
+
+### Quick Setup for ChatGPT
+
+#### One-Click Deploy to Railway
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/new?template=https%3A%2F%2Fgithub.com%2FLaksh-star%2Fmcp-server-tmdb&envs=TMDB_API_KEY&TMDB_API_KEYDesc=Your+TMDB+API+key+from+themoviedb.org)
+
+**Or manual deployment**:
+1. **Deploy to Railway (or similar platform)**:
+   - Set `TMDB_API_KEY` environment variable
+   - Deploy using the included `railway.toml` configuration
+   - Server will run on `npm run start:chatgpt` command
+
+2. **Add to ChatGPT**:
+   - Go to ChatGPT Developer Mode settings
+   - Add your deployed server URL
+   - ChatGPT will connect to the `/sse` endpoint automatically
+
+3. **Available ChatGPT Tools**:
+   - **search**: Search for movies by title or keywords
+   - **fetch**: Get detailed movie information by TMDB ID
+
+### Run ChatGPT-compatible server locally:
+```bash
+npm run start:chatgpt
+```
+
+The server will start with SSE endpoints at `/sse` and `/messages` for ChatGPT integration.
+
 ### Usage with Claude Desktop
 
 To integrate this server with Claude Desktop, add the following to your app's server configuration file (located at `~/Library/Application Support/Claude/config.json`):
@@ -171,6 +203,24 @@ Once the server is running with Claude Desktop, you can use commands like:
    "Tell me about the movie with ID 550"
    ```
 
+### ChatGPT Usage Examples
+
+Once deployed and connected to ChatGPT Developer Mode:
+
+1. **Search movies in ChatGPT**:
+   ```
+   "Search for sci-fi movies about space"
+   "Find movies with Tom Hanks"
+   ```
+
+2. **Get detailed movie information**:
+   ```
+   "Fetch details for movie ID 550"
+   "Get information about Blade Runner 2049"
+   ```
+
+ChatGPT will automatically use the `search` and `fetch` tools to provide movie information directly in the conversation.
+
 ## Error handling
 
 The server includes comprehensive error handling for:
@@ -187,6 +237,15 @@ To watch for changes during development:
 ```bash
 npm run watch
 ```
+
+### Available Scripts
+
+- `npm run build` - Build the TypeScript project
+- `npm run watch` - Watch for changes during development  
+- `npm run start:chatgpt` - Run ChatGPT-compatible MCP server
+- `npm run prepare` - Build and set executable permissions
+
+For implementation details on ChatGPT integration, see `CHATGPT_INTEGRATION.md`.
 
 ## License
 
