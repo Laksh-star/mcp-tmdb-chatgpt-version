@@ -12,7 +12,8 @@
     "start:simple": "node src/server-simple-oauth.js",
     "start:sse": "node src/server-sse-oauth.js",
     "start:final": "node src/server-final.js",
-    "start:noauth": "node src/server-no-auth.js"
+    "start:noauth": "node src/server-no-auth.js",
+    "start:chatgpt": "node server-http.js"
   },
   "keywords": [],
   "author": "",
