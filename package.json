@@ -8,7 +8,8 @@
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "start:http": "node src/server-http.js",
-    "start:oauth": "node src/server-oauth.js"
+    "start:oauth": "node src/server-oauth.js",
+    "start:simple": "node src/server-simple-oauth.js"
   },
   "keywords": [],
   "author": "",
