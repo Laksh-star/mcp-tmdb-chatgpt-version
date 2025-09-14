@@ -1,26 +1,19 @@
 #!/usr/bin/env node
 
-import express from "express";
-import { randomUUID } from "node:crypto";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import fetch from 'node-fetch';
+import express from 'express';
 import cors from 'cors';
 
 const app = express();
-app.use(cors({
-  origin: true,
-  credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Cache-Control', 'Accept']
-}));
+app.use(cors());
 app.use(express.json());
 
-// Create the MCP server
 const server = new Server(
   {
-    name: 'tmdb-mcp-server',
+    name: 'mcp-server-tmdb',
     version: '1.0.0',
   },
   {
@@ -30,9 +23,8 @@ const server = new Server(
   }
 );
 
-// Configure MCP server with only search and fetch tools (as required by ChatGPT)
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  console.log('Tools requested');
+  console.log('Tools requested by ChatGPT');
   return {
     tools: [
       {
@@ -72,10 +64,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const apiKey = process.env.TMDB_API_KEY;
   
   if (!apiKey) {
-    throw new Error('TMDB_API_KEY required');
+    throw new Error('TMDB_API_KEY environment variable is required');
   }
 
-  console.log(`Tool called: ${name}`, args);
+  console.log(`ChatGPT called tool: ${name}`, args);
 
   try {
     switch (name) {
@@ -85,7 +77,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         );
         const data = await response.json();
         
-        // Format as required by ChatGPT MCP spec
         const results = {
           results: data.results?.slice(0, 10).map(movie => ({
             id: movie.id.toString(),
@@ -94,7 +85,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           })) || []
         };
         
-        console.log(`Search returned ${results.results.length} results`);
+        console.log(`Search returned ${results.results.length} movies`);
         return { content: [{ type: 'text', text: JSON.stringify(results) }] };
       }
       
@@ -104,7 +95,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         );
         const data = await response.json();
         
-        // Format as required by ChatGPT MCP spec
         const document = {
           id: data.id?.toString() || args.id,
           title: `${data.title} (${data.release_date?.split('-')[0] || 'Unknown'})`,
@@ -124,24 +114,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error) {
-    console.error('Tool error:', error);
-    throw new Error(`Tool failed: ${error.message}`);
+    console.error('Tool execution error:', error);
+    throw new Error(`Tool execution failed: ${error.message}`);
   }
 });
 
 // Create SSE transport
-const transport = new SSEServerTransport('/sse', server);
+const transport = new SSEServerTransport('/messages', server);
 
-// SSE endpoint (no authentication required)
+// Set up routes
 app.get('/sse', async (req, res) => {
   console.log('SSE connection from:', req.headers['user-agent']);
-  await transport.handleRequest(req, res);
+  return transport.handleSSEConnection(req, res);
 });
 
-// Messages endpoint (no authentication required) 
 app.post('/messages', async (req, res) => {
-  console.log('Messages request');
-  await transport.handleRequest(req, res);
+  console.log('Messages POST request');
+  return transport.handlePostRequest(req, res);
 });
 
 // Root status
