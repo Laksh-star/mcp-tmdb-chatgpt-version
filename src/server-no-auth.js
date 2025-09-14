@@ -123,14 +123,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 const transport = new SSEServerTransport('/messages', server);
 
 // Set up routes
-app.get('/sse', async (req, res) => {
+app.get('/sse', (req, res) => {
   console.log('SSE connection from:', req.headers['user-agent']);
-  return transport.handleSSEConnection(req, res);
+  transport.handleSSEConnection(req, res);
 });
 
-app.post('/messages', async (req, res) => {
-  console.log('Messages POST request');
-  return transport.handlePostRequest(req, res);
+app.post('/messages', (req, res) => {
+  console.log('Messages POST request');  
+  transport.handlePostRequest(req, res);
 });
 
 // Root status
