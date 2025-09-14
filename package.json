@@ -11,7 +11,8 @@
     "start:oauth": "node src/server-oauth.js",
     "start:simple": "node src/server-simple-oauth.js",
     "start:sse": "node src/server-sse-oauth.js",
-    "start:final": "node src/server-final.js"
+    "start:final": "node src/server-final.js",
+    "start:noauth": "node src/server-no-auth.js"
   },
   "keywords": [],
   "author": "",
